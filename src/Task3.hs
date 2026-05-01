@@ -1,13 +1,14 @@
 {-# OPTIONS_GHC -Wall #-}
+
 -- The above pragma enables all warnings
 
 module Task3 where
 
-import Task2 (Stream)
-import Data.Ratio (Ratio)
+import Data.Ratio (Ratio, numerator)
+import Task2 (Stream (Stream))
 
 -- | Power series represented as infinite stream of coefficients
--- 
+--
 -- For following series
 --   @a0 + a1 * x + a2 * x^2 + ...@
 -- coefficients would be
@@ -21,16 +22,51 @@ import Data.Ratio (Ratio)
 -- [1,5,10,10,5,1,0,0,0,0]
 -- >>> coefficients (42 :: Series Integer)
 -- [42,0,0,0,0,0,0,0,0,0]
---
 newtype Series a = Series
-  { coefficients :: Stream a
-  -- ^ Returns coefficients of given power series
-  --
-  -- For following series
-  --   @a0 + a1 * x + a2 * x^2 + ...@
-  -- coefficients would be
-  --   @a0, a1, a2, ...@
+  { -- | Returns coefficients of given power series
+    --
+    -- For following series
+    --   @a0 + a1 * x + a2 * x^2 + ...@
+    -- coefficients would be
+    --   @a0, a1, a2, ...@
+    coefficients :: Stream a
   }
+
+-- * Utility functions
+
+mapS :: (a -> b) -> Stream a -> Stream b
+mapS f (Stream y xs) = Stream (f y) (mapS f xs)
+
+repeatS :: a -> Stream a
+repeatS y = Stream y (repeatS y)
+
+zipWithS :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
+zipWithS f (Stream x' xs) (Stream y ys) =
+  Stream (f x' y) (zipWithS f xs ys)
+
+instance (Num a) => Num (Series a) where
+  fromInteger n = Series (Stream (fromInteger n) (repeatS 0))
+
+  negate (Series s) = Series (mapS negate s)
+
+  Series a + Series b = Series (zipWithS (+) a b)
+
+  Series (Stream a0 a') * b@(Series (Stream b0 b')) =
+    Series $
+      Stream
+        (a0 * b0)
+        (coefficients ((a0 *: Series b') + (Series a' * b)))
+
+  abs = id
+  signum _ = 1
+
+instance (Fractional a) => Fractional (Series a) where
+  fromRational r = Series (Stream (fromRational r) (repeatS 0))
+
+  Series (Stream a0 a') / Series (Stream b0 b') =
+    let q0 = a0 / b0
+        rest = (Series a' - (q0 *: Series b')) / Series (Stream b0 b')
+     in Series (Stream q0 (coefficients rest))
 
 -- | Power series corresponding to single @x@
 --
@@ -38,12 +74,11 @@ newtype Series a = Series
 --
 -- >>> coefficients x
 -- [0,1,0,0,0,0,0,0,0,0]
---
-x :: Num a => Series a
-x = error "TODO: define x"
+x :: (Num a) => Series a
+x = Series (Stream 0 (Stream 1 (repeatS 0)))
 
 -- | Multiplies power series by given number
--- 
+--
 -- For following series
 --   @a0 + a1 * x + a2 * x^2 + ...@
 -- coefficients would be
@@ -55,10 +90,10 @@ x = error "TODO: define x"
 -- [0,2,2,0,2,0,0,0,0,0]
 -- >>> coefficients (2 *: ((1 + x)^5))
 -- [2,10,20,20,10,2,0,0,0,0]
---
 infixl 7 *:
-(*:) :: Num a => a -> Series a -> Series a
-(*:) = error "TODO: define (*:)"
+
+(*:) :: (Num a) => a -> Series a -> Series a
+a *: Series s = Series (mapS (a *) s)
 
 -- | Helper function for producing integer
 -- coefficients from generating function
@@ -68,9 +103,8 @@ infixl 7 *:
 --
 -- >>> gen $ (2 + 3 * x)
 -- [2,3,0,0,0,0,0,0,0,0]
---
 gen :: Series (Ratio Integer) -> Stream Integer
-gen = error "TODO: define gen"
+gen (Series s) = mapS numerator s
 
 -- | Returns infinite stream of ones
 --
@@ -78,9 +112,8 @@ gen = error "TODO: define gen"
 --
 -- >>> ones
 -- [1,1,1,1,1,1,1,1,1,1]
---
 ones :: Stream Integer
-ones = error "TODO: define ones"
+ones = gen (1 / (1 - x))
 
 -- | Returns infinite stream of natural numbers (excluding zero)
 --
@@ -88,9 +121,8 @@ ones = error "TODO: define ones"
 --
 -- >>> nats
 -- [1,2,3,4,5,6,7,8,9,10]
---
 nats :: Stream Integer
-nats = error "TODO: define nats (Task3)"
+nats = gen (1 / ((1 - x) * (1 - x)))
 
 -- | Returns infinite stream of fibonacci numbers (starting with zero)
 --
@@ -98,7 +130,5 @@ nats = error "TODO: define nats (Task3)"
 --
 -- >>> fibs
 -- [0,1,1,2,3,5,8,13,21,34]
---
 fibs :: Stream Integer
-fibs = error "TODO: define fibs (Task3)"
-
+fibs = gen (x / (1 - x - x * x))
